@@ -1,0 +1,116 @@
+// ============================================================
+//  FELS – Vers-Widget für Scriptable (iOS)
+//  Zeigt: Vers des Tages (Schlachter 2000), Ruhe-Anker,
+//         Tagesfokus und Countdown bis 7. Januar 2027.
+//  Tippen öffnet die FELS-App. Es werden KEINE privaten Daten
+//  gelesen – nur der öffentliche Vers-Katalog von der Pages-Seite.
+//  Einrichtung: siehe ANLEITUNG unten in der Chat-Nachricht.
+// ============================================================
+
+const APP_URL    = "https://adrimojo.github.io/fels-app/";
+const VERSES_URL = "https://adrimojo.github.io/fels-app/verses.js";
+const GOAL       = new Date(2027, 0, 7);   // 7. Januar 2027
+
+// Farben – wie die App
+const BG1 = new Color("#1f261a"), BG2 = new Color("#14170f");
+const ACCENT = new Color("#c9a961"), TEXT = new Color("#ece8dc"),
+      MUTED = new Color("#9aa08a"), GREEN = new Color("#7da05f");
+
+const WD = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+
+const RUHE = [
+  "Atme durch. Gott hat für heute schon vorgesorgt.",
+  "Erst still werden, dann handeln. Ein Ding nach dem anderen.",
+  "Sorge dich um nichts – leg es im Gebet ab.",
+  "Nicht alles heute. Das Nötige heute, treu und ruhig.",
+  "Er trägt dich – nicht in eigener Kraft.",
+  "Frieden ist Vertrauen mittendrin.",
+  "Fang mit dem Kleinsten an.",
+];
+const FOCUS = {
+  1: "Montag: Wiegen & Bürotag – Zahlen, Terrahum, Wochenreview.",
+  2: "Dienstag: Aussendienst mit Plan. Hörbuch statt Radio.",
+  3: "Mittwoch: Wochenmitte – eine Terrahum-Lücke schliessen.",
+  4: "Donnerstag: Dranbleiben. Bewegung nicht auf den Abend schieben.",
+  5: "Freitag: Woche sauber abschliessen – offene Ausgaben notieren.",
+  6: "Samstag: Länger bewegen, Zeit fürs Buch & Putzen.",
+  0: "Sonntag: Ruhe & Dankbarkeit. Woche mit Gott beginnen.",
+};
+
+// Offline-Reserve, falls die Seite gerade nicht erreichbar ist
+const FALLBACK = [
+  { ref: "Matthäus 7,24", text: "Wer diese meine Worte hört und sie tut, den will ich mit einem klugen Mann vergleichen, der sein Haus auf den Felsen baute." },
+  { ref: "Josua 1,9", text: "Sei stark und mutig, sei nicht verzagt; denn der HERR, dein Gott, ist mit dir überall, wo du hingehst!" },
+  { ref: "Philipper 4,13", text: "Ich vermag alles durch den, der mich stark macht, Christus." },
+  { ref: "Galater 6,9", text: "Lasst uns im Gutestun nicht müde werden; denn zu seiner Zeit werden wir ernten, wenn wir nicht ermatten." },
+  { ref: "Jesaja 40,31", text: "Die auf den HERRN harren, kriegen neue Kraft, dass sie laufen und nicht matt werden." },
+  { ref: "Sprüche 3,5-6", text: "Vertraue auf den HERRN von ganzem Herzen und verlass dich nicht auf deinen Verstand; erkenne ihn auf allen deinen Wegen, so wird er deine Pfade ebnen." },
+];
+
+function dayOfYear(d) { return Math.floor((d - new Date(d.getFullYear(), 0, 0)) / 864e5); }
+function shorten(s, n) { return s.length > n ? s.slice(0, n).trim() + "…" : s; }
+
+async function loadVerses() {
+  try {
+    const req = new Request(VERSES_URL);
+    req.timeoutInterval = 8;
+    const code = await req.loadString();
+    const VERSES = new Function(code + "\n;return typeof VERSES!=='undefined'?VERSES:null;")();
+    if (Array.isArray(VERSES) && VERSES.length) return VERSES;
+  } catch (e) { /* offline → Fallback */ }
+  return FALLBACK;
+}
+
+const now = new Date();
+const verses = await loadVerses();
+const doy = dayOfYear(now);
+const evening = now.getHours() >= 18;
+const v = verses[(doy * 2 + (evening ? 1 : 0)) % verses.length];
+const daysLeft = Math.max(0, Math.ceil((GOAL - now) / 864e5));
+const family = config.widgetFamily || "medium";
+
+const w = new ListWidget();
+const grad = new LinearGradient();
+grad.colors = [BG1, BG2]; grad.locations = [0, 1];
+w.backgroundGradient = grad;
+w.setPadding(14, 15, 14, 15);
+w.url = APP_URL;
+
+// Kopfzeile
+const head = w.addStack(); head.centerAlignContent();
+const title = head.addText("FELS"); title.font = Font.boldSystemFont(15); title.textColor = ACCENT;
+head.addSpacer();
+const dc = head.addText(WD[now.getDay()] + ", " + now.getDate() + "." + (now.getMonth() + 1) + ".");
+dc.font = Font.systemFont(11); dc.textColor = MUTED;
+w.addSpacer(8);
+
+if (family === "small") {
+  const vt = w.addText("„" + shorten(v.text, 95) + "“");
+  vt.font = Font.systemFont(12); vt.textColor = TEXT; vt.minimumScaleFactor = 0.7; vt.lineLimit = 5;
+  w.addSpacer(4);
+  const r = w.addText(v.ref); r.font = Font.mediumSystemFont(11); r.textColor = ACCENT;
+  w.addSpacer();
+  const cd = w.addText(daysLeft + " Tage bis 7.1."); cd.font = Font.boldSystemFont(12); cd.textColor = GREEN;
+} else {
+  const vt = w.addText("„" + v.text + "“");
+  vt.font = Font.systemFont(family === "large" ? 15 : 13); vt.textColor = TEXT;
+  vt.minimumScaleFactor = 0.6; vt.lineLimit = family === "large" ? 9 : 4;
+  w.addSpacer(5);
+  const r = w.addText(v.ref + " · Schlachter 2000"); r.font = Font.mediumSystemFont(11); r.textColor = ACCENT;
+  w.addSpacer(8);
+  const ru = w.addText(RUHE[doy % RUHE.length]); ru.font = Font.italicSystemFont(12); ru.textColor = GREEN; ru.lineLimit = 2;
+  if (family === "large") {
+    w.addSpacer(6);
+    const fo = w.addText(FOCUS[now.getDay()]); fo.font = Font.systemFont(12); fo.textColor = MUTED; fo.lineLimit = 3;
+  }
+  w.addSpacer();
+  const cd = w.addText("Noch " + daysLeft + " Tage bis 7. Januar 2027");
+  cd.font = Font.boldSystemFont(12); cd.textColor = GREEN;
+}
+
+// Stündlich auffrischen (Vers wechselt morgens/abends, Countdown täglich)
+w.refreshAfterDate = new Date(now.getTime() + 60 * 60 * 1000);
+
+if (config.runsInWidget) Script.setWidget(w);
+else await w.presentMedium();
+Script.complete();
