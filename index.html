@@ -274,6 +274,25 @@
   <div class="book-list" id="bookList"></div>
 </div>
 
+<div class="card">
+  <h2>Cloud-Backup <span class="count" id="cloudStatus"></span></h2>
+  <div id="cloudConnected" style="display:none">
+    <div class="sec-note" id="cloudInfo" style="margin-top:0">Verbunden. Sichert automatisch bei jeder Änderung.</div>
+    <div class="footer-btns" style="margin-top:10px">
+      <button id="cloudNow">Jetzt sichern</button>
+      <button id="cloudRestore">Wiederherstellen</button>
+      <button id="cloudDisconnect">Trennen</button>
+    </div>
+  </div>
+  <div id="cloudSetup">
+    <div class="sec-note" style="margin-top:0">Automatische Sicherung in deinen privaten Cloudflare-Speicher. Schlüssel einmalig eingeben – danach läuft's von allein:</div>
+    <div class="add-form">
+      <input type="text" id="cloudKey" placeholder="Backup-Schlüssel einfügen" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button id="cloudConnect">Verbinden</button>
+    </div>
+  </div>
+</div>
+
 <div class="footer-btns">
   <button id="exportBtn">Export</button>
   <button id="importBtn">Import</button>
@@ -292,7 +311,11 @@ function load() {
   const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
   return Object.assign({}, DEFAULTS, raw);
 }
-const save = d => localStorage.setItem(KEY, JSON.stringify(d));
+const save = d => { localStorage.setItem(KEY, JSON.stringify(d)); cloudPushDebounced(); };
+// Cloud-Backup (Weg B): eigener Cloudflare-KV-Store, Zugriff nur mit Geheim-Schlüssel
+const BACKUP_URL = 'https://fels-push.adrimojo.workers.dev/backup';
+const CK = 'fels-cloudkey', CK_LAST = 'fels-cloudlast';
+let cloudTimer = null;
 let data = load();
 const today = todayStr();
 if (!data.days[today]) data.days[today] = {};
@@ -603,6 +626,85 @@ document.getElementById('importFile').onchange = (e) => {
   reader.readAsText(file);
   e.target.value = '';
 };
+
+// --- Cloud-Backup (Weg B) ---
+function cloudKey() { return localStorage.getItem(CK) || ''; }
+function setCloudUI() {
+  const has = !!cloudKey();
+  document.getElementById('cloudConnected').style.display = has ? 'block' : 'none';
+  document.getElementById('cloudSetup').style.display = has ? 'none' : 'block';
+  const last = localStorage.getItem(CK_LAST);
+  document.getElementById('cloudStatus').textContent = has ? (last ? 'zuletzt ' + last : 'verbunden') : '';
+}
+function stampCloud() {
+  const t = new Date().toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  localStorage.setItem(CK_LAST, t);
+  const st = document.getElementById('cloudStatus'); if (st) st.textContent = 'zuletzt ' + t;
+}
+async function cloudPush(loud) {
+  const key = cloudKey(); if (!key) return false;
+  try {
+    const r = await fetch(BACKUP_URL, { method: 'POST', headers: { 'x-backup-key': key, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    if (r.ok) { stampCloud(); return true; }
+    if (r.status === 403 && loud) alert('Backup-Schlüssel ungültig.');
+  } catch (e) { /* offline – nächste Änderung sichert wieder */ }
+  return false;
+}
+function cloudPushDebounced() {
+  if (!cloudKey()) return;
+  clearTimeout(cloudTimer);
+  cloudTimer = setTimeout(() => cloudPush(false), 3500);
+}
+function applyBackup(txt) {
+  const obj = JSON.parse(txt);
+  if (!obj || typeof obj !== 'object' || !('days' in obj)) throw new Error('kein FELS-Backup');
+  data = Object.assign({}, DEFAULTS, obj);
+  save(data);
+}
+document.getElementById('cloudConnect').onclick = async () => {
+  const key = document.getElementById('cloudKey').value.trim();
+  if (!key) { alert('Schlüssel einfügen.'); return; }
+  let r;
+  try { r = await fetch(BACKUP_URL, { method: 'GET', headers: { 'x-backup-key': key } }); }
+  catch (e) { alert('Keine Verbindung. Später nochmal versuchen.'); return; }
+  if (r.status === 403) { alert('Dieser Schlüssel stimmt nicht.'); return; }
+  if (r.status === 200) {
+    let when = '';
+    try { const m = JSON.parse(r.headers.get('x-backup-meta') || '{}'); if (m.at) when = ' vom ' + new Date(m.at).toLocaleString('de-CH'); } catch (e) {}
+    if (confirm('Es liegt bereits ein Cloud-Backup' + when + '. Jetzt auf DIESES Gerät laden? (Aktuelle Daten hier werden ersetzt.)')) {
+      try { localStorage.setItem(CK, key); applyBackup(await r.text()); alert('Aus Cloud geladen.'); location.reload(); }
+      catch (e) { alert('Backup beschädigt: ' + e.message); }
+    } else {
+      localStorage.setItem(CK, key); await cloudPush(true); setCloudUI();
+      alert('Verbunden. Dieses Gerät sichert ab jetzt automatisch (die Cloud wurde mit den lokalen Daten überschrieben).');
+    }
+    return;
+  }
+  if (r.status === 404) {
+    localStorage.setItem(CK, key); await cloudPush(true); setCloudUI();
+    alert('Verbunden. Ab jetzt wird bei jeder Änderung automatisch gesichert.');
+    return;
+  }
+  alert('Unerwartete Antwort (' + r.status + ').');
+};
+document.getElementById('cloudNow').onclick = async () => { const ok = await cloudPush(true); if (ok) alert('Gesichert.'); };
+document.getElementById('cloudRestore').onclick = async () => {
+  const key = cloudKey(); if (!key) return;
+  let r;
+  try { r = await fetch(BACKUP_URL, { method: 'GET', headers: { 'x-backup-key': key } }); }
+  catch (e) { alert('Keine Verbindung.'); return; }
+  if (r.status === 404) { alert('Noch kein Cloud-Backup vorhanden.'); return; }
+  if (!r.ok) { alert('Fehler (' + r.status + ').'); return; }
+  if (!confirm('Cloud-Backup laden? Aktuelle Daten auf diesem Gerät werden ersetzt.')) return;
+  try { applyBackup(await r.text()); alert('Wiederhergestellt.'); location.reload(); }
+  catch (e) { alert('Backup beschädigt: ' + e.message); }
+};
+document.getElementById('cloudDisconnect').onclick = () => {
+  if (confirm('Cloud-Backup auf diesem Gerät trennen? (Die Daten in der Cloud bleiben erhalten, es wird nur nicht mehr automatisch gesichert.)')) {
+    localStorage.removeItem(CK); localStorage.removeItem(CK_LAST); setCloudUI();
+  }
+};
+setCloudUI();
 
 // Export / Reset
 document.getElementById('exportBtn').onclick = () => {
