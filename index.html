@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1f16">
+<title>FELS – Auf Fels gebaut</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="verses.js"></script>
+<style>
+  :root {
+    --bg: #14170f; --card: #1e2318; --card2: #262c1e;
+    --text: #ece8dc; --muted: #9aa08a; --accent: #c9a961; --green: #7da05f;
+    --red: #c96161; --border: #333a29;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; padding: 16px; padding-bottom: 90px; max-width: 520px; margin: 0 auto; }
+  header { text-align: center; margin: 12px 0 20px; }
+  header h1 { font-size: 30px; letter-spacing: 8px; color: var(--accent); font-weight: 700; }
+  header .sub { color: var(--muted); font-size: 12px; margin-top: 2px; }
+  header .date { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .streak { display: inline-block; margin-top: 8px; background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 4px 14px; font-size: 13px; }
+  .streak b { color: var(--accent); }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px; }
+  .card h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 2px; color: var(--accent); margin-bottom: 12px; }
+  .verse { font-style: italic; line-height: 1.55; font-size: 15px; }
+  .verse-ref { display: block; margin-top: 10px; font-style: normal; color: var(--accent); font-size: 13px; font-weight: 600; }
+  .check-row { display: flex; align-items: center; justify-content: space-between; padding: 11px 0; border-bottom: 1px solid var(--border); }
+  .check-row:last-child { border-bottom: none; }
+  .check-row .label { font-size: 15px; }
+  .check-row .hint { font-size: 11px; color: var(--muted); }
+  .toggle { width: 52px; height: 30px; border-radius: 15px; background: var(--card2); border: 1px solid var(--border); position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+  .toggle::after { content: ''; position: absolute; width: 24px; height: 24px; border-radius: 50%; background: var(--muted); top: 2px; left: 2px; transition: all .2s; }
+  .toggle.on { background: var(--green); }
+  .toggle.on::after { left: 24px; background: #fff; }
+  input[type=number], input[type=text] { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 8px 10px; font-size: 15px; width: 110px; text-align: right; }
+  input[type=text] { width: 100%; text-align: left; }
+  .grateful { margin-top: 4px; }
+  .monday { border: 1px solid var(--accent); }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
+  .stat { background: var(--card2); border-radius: 10px; padding: 10px 4px; }
+  .stat .val { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .stat .lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  svg.chart { width: 100%; height: 130px; margin-top: 10px; }
+  .milestone { font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .milestone b { color: var(--text); }
+  .books { display: flex; align-items: center; gap: 12px; }
+  .books button { background: var(--accent); color: #14170f; border: none; border-radius: 8px; padding: 8px 14px; font-weight: 700; font-size: 14px; cursor: pointer; }
+  .book-list { font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  .footer-btns { display: flex; gap: 10px; margin-top: 4px; }
+  .footer-btns button { flex: 1; background: var(--card2); color: var(--muted); border: 1px solid var(--border); border-radius: 10px; padding: 10px; font-size: 13px; cursor: pointer; }
+  .rule { text-align: center; font-size: 12px; color: var(--muted); margin: 18px 0; font-style: italic; }
+  .done-banner { background: var(--green); color: #fff; border-radius: 10px; padding: 10px; text-align: center; font-weight: 600; font-size: 14px; margin-bottom: 14px; display: none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>FELS</h1>
+  <div class="sub">Fokus · Ernährung · Lesen · Seele</div>
+  <div class="date" id="dateLine"></div>
+  <div class="streak">🔥 <b id="streak">0</b> Tage in Folge</div>
+</header>
+
+<div class="done-banner" id="doneBanner">✓ Tag komplett. Gut gemacht – zu seiner Zeit wirst du ernten.</div>
+
+<div class="card">
+  <h2 id="verseTitle">Vers des Tages</h2>
+  <div class="verse" id="verseText"></div>
+  <span class="verse-ref" id="verseRef"></span>
+</div>
+
+<div class="card" id="checkCard">
+  <h2>Check-in heute</h2>
+  <div class="check-row"><div><div class="label">Bewegung 45 Min</div><div class="hint">Gehen, Kraft, Velo – egal was</div></div><div class="toggle" data-k="move"></div></div>
+  <div class="check-row"><div><div class="label">Essen nach Plan</div><div class="hint">Kein Snack unterwegs, nichts nach 20:00</div></div><div class="toggle" data-k="food"></div></div>
+  <div class="check-row"><div><div class="label">30 Min gelesen</div><div class="hint">Buch, kein Handy</div></div><div class="toggle" data-k="read"></div></div>
+  <div class="check-row"><div><div class="label">Ausgaben notiert</div><div class="hint">5 Sekunden Ehrlichkeit</div></div><div class="toggle" data-k="money"></div></div>
+  <div class="check-row"><div><div class="label">Schritte heute</div><div class="hint">Aus deinem Handy-Zähler übertragen</div></div><input type="number" id="steps" placeholder="z.B. 8500" inputmode="numeric"></div>
+  <div class="check-row" id="weightRow" style="display:none"><div><div class="label">⚖️ Gewicht (Montag!)</div><div class="hint">Nüchtern, gleiche Waage</div></div><input type="number" id="weight" placeholder="kg" step="0.1" inputmode="decimal"></div>
+  <div class="check-row grateful" style="display:block; border:none;"><div class="label" style="margin-bottom:6px;">Wofür dankst du Gott heute?</div><input type="text" id="grateful" placeholder="Eine Sache reicht…"></div>
+</div>
+
+<div class="card">
+  <h2>Fortschritt</h2>
+  <div class="stat-grid">
+    <div class="stat"><div class="val" id="kgLost">–</div><div class="lbl">kg abgenommen</div></div>
+    <div class="stat"><div class="val" id="avgSteps">–</div><div class="lbl">Ø Schritte (7 T.)</div></div>
+    <div class="stat"><div class="val" id="bookCount">0</div><div class="lbl">Bücher / 6</div></div>
+  </div>
+  <svg class="chart" id="weightChart" viewBox="0 0 300 130" preserveAspectRatio="none"></svg>
+  <div class="milestone" id="milestone"></div>
+</div>
+
+<div class="card">
+  <h2>Bücher</h2>
+  <div class="books"><button id="addBook">+ Buch fertig</button><span id="lastBook" style="font-size:13px;color:var(--muted)"></span></div>
+  <div class="book-list" id="bookList"></div>
+</div>
+
+<div class="footer-btns">
+  <button id="exportBtn">Daten exportieren</button>
+  <button id="resetToday">Heute zurücksetzen</button>
+</div>
+
+<div class="rule">«Zwei verpasste Tage in Folge gibt es nicht.»<br>Ziel: 7. Januar 2027 · −20 kg · Terrahum läuft · 6 Bücher</div>
+
+<script>
+const KEY = 'fels-data';
+const todayStr = () => new Date().toISOString().slice(0,10);
+const load = () => JSON.parse(localStorage.getItem(KEY) || '{"days":{},"weights":[],"books":[],"startWeight":null}');
+const save = d => localStorage.setItem(KEY, JSON.stringify(d));
+let data = load();
+const today = todayStr();
+if (!data.days[today]) data.days[today] = {};
+const day = data.days[today];
+
+// Datum
+const d = new Date();
+document.getElementById('dateLine').textContent = d.toLocaleDateString('de-CH', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+// Vers: deterministisch nach Tag; ab 18 Uhr Abendvers
+const dayOfYear = Math.floor((d - new Date(d.getFullYear(),0,0)) / 864e5);
+const evening = d.getHours() >= 18;
+const idx = (dayOfYear * 2 + (evening ? 1 : 0)) % VERSES.length;
+const v = VERSES[idx];
+document.getElementById('verseTitle').textContent = evening ? 'Vers zum Abend' : 'Vers des Tages';
+document.getElementById('verseText').textContent = '«' + v.text + '»';
+document.getElementById('verseRef').textContent = v.ref + ' (Schlachter 2000)';
+
+// Montag → Gewicht
+const isMonday = d.getDay() === 1;
+if (isMonday) {
+  document.getElementById('weightRow').style.display = 'flex';
+  document.getElementById('checkCard').classList.add('monday');
+}
+
+// Toggles
+document.querySelectorAll('.toggle').forEach(t => {
+  const k = t.dataset.k;
+  if (day[k]) t.classList.add('on');
+  t.onclick = () => { day[k] = !day[k]; t.classList.toggle('on', day[k]); persist(); };
+});
+
+// Inputs
+const stepsEl = document.getElementById('steps');
+const weightEl = document.getElementById('weight');
+const gratefulEl = document.getElementById('grateful');
+stepsEl.value = day.steps || '';
+gratefulEl.value = day.grateful || '';
+const wToday = data.weights.find(w => w.date === today);
+if (wToday) weightEl.value = wToday.kg;
+stepsEl.onchange = () => { day.steps = +stepsEl.value || 0; persist(); };
+gratefulEl.onchange = () => { day.grateful = gratefulEl.value; persist(); };
+weightEl.onchange = () => {
+  const kg = +weightEl.value; if (!kg) return;
+  data.weights = data.weights.filter(w => w.date !== today);
+  data.weights.push({ date: today, kg });
+  data.weights.sort((a,b) => a.date.localeCompare(b.date));
+  if (!data.startWeight) data.startWeight = kg;
+  persist();
+};
+
+// Bücher
+document.getElementById('addBook').onclick = () => {
+  const t = prompt('Titel des Buchs?'); if (!t) return;
+  data.books.push({ title: t, date: today }); persist();
+};
+
+// Export / Reset
+document.getElementById('exportBtn').onclick = () => {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'fels-backup-' + today + '.json'; a.click();
+};
+document.getElementById('resetToday').onclick = () => {
+  if (confirm('Heutigen Check-in zurücksetzen?')) { data.days[today] = {}; persist(); location.reload(); }
+};
+
+function dayComplete(dd) { return dd && dd.move && dd.food && dd.read && dd.money; }
+
+function calcStreak() {
+  let s = 0; const cur = new Date();
+  if (dayComplete(data.days[todayStr()])) s++;
+  for (let i = 1; i < 400; i++) {
+    const dt = new Date(cur); dt.setDate(dt.getDate() - i);
+    if (dayComplete(data.days[dt.toISOString().slice(0,10)])) s++; else break;
+  }
+  return s;
+}
+
+function render() {
+  document.getElementById('streak').textContent = calcStreak();
+  document.getElementById('doneBanner').style.display = dayComplete(day) ? 'block' : 'none';
+  // kg
+  const kgEl = document.getElementById('kgLost');
+  if (data.weights.length && data.startWeight) {
+    const last = data.weights[data.weights.length-1].kg;
+    kgEl.textContent = '−' + Math.max(0, data.startWeight - last).toFixed(1);
+  }
+  // Schritte Ø 7 Tage
+  let sum = 0, n = 0;
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(); dt.setDate(dt.getDate() - i);
+    const dd = data.days[dt.toISOString().slice(0,10)];
+    if (dd && dd.steps) { sum += dd.steps; n++; }
+  }
+  document.getElementById('avgSteps').textContent = n ? Math.round(sum/n).toLocaleString('de-CH') : '–';
+  // Bücher
+  document.getElementById('bookCount').textContent = data.books.length;
+  document.getElementById('bookList').innerHTML = data.books.map(b => '📖 ' + b.title + ' <span style="opacity:.5">(' + b.date + ')</span>').join('<br>');
+  // Gewichtskurve
+  const svg = document.getElementById('weightChart');
+  if (data.weights.length >= 2) {
+    const ws = data.weights, min = Math.min(...ws.map(w=>w.kg)) - 1, max = Math.max(...ws.map(w=>w.kg)) + 1;
+    const x = i => 10 + i * 280 / (ws.length - 1);
+    const y = kg => 120 - (kg - min) / (max - min) * 110;
+    let path = ws.map((w,i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(w.kg).toFixed(1)).join(' ');
+    // Ziellinie: Start −20
+    const goal = data.startWeight - 20;
+    let goalLine = (goal >= min && goal <= max) ? `<line x1="10" y1="${y(goal)}" x2="290" y2="${y(goal)}" stroke="#7da05f" stroke-dasharray="4 3" stroke-width="1"/><text x="288" y="${y(goal)-4}" fill="#7da05f" font-size="9" text-anchor="end">Ziel ${goal.toFixed(0)} kg</text>` : '';
+    svg.innerHTML = goalLine + `<path d="${path}" fill="none" stroke="#c9a961" stroke-width="2"/>` +
+      ws.map((w,i) => `<circle cx="${x(i)}" cy="${y(w.kg)}" r="3" fill="#c9a961"/>`).join('');
+  } else {
+    svg.innerHTML = '<text x="150" y="70" fill="#9aa08a" font-size="11" text-anchor="middle">Kurve erscheint ab der 2. Montags-Wiegung</text>';
+  }
+  // Monats-Meilenstein
+  const ms = { 7:'Juli: Routine steht · −2 kg · Zusatzvereinbarung Timac eingereicht · Buch 1',
+    8:'August: −6 kg total · Pilot-Doku Halbzeit · Preisliste Terrahum · Buch 2',
+    9:'September: −9 kg · Erste Offerte an Pilotkunden · Buch 3',
+    10:'Oktober: −13 kg · ERSTE BEZAHLTE RECHNUNG · Buch 4',
+    11:'November: −16 kg · 2–3 zahlende Kunden · Buch 5',
+    12:'Dezember: −18–20 kg · Jahresabschluss Pilot · Buch 6',
+    1:'Januar: ZIEL ERREICHT – Rückblick & Plan 2027' };
+  document.getElementById('milestone').innerHTML = '<b>Meilenstein diesen Monat:</b><br>' + (ms[d.getMonth()+1] || '');
+}
+
+function persist() { save(data); render(); }
+render();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>
