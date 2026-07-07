@@ -87,6 +87,14 @@
   .journal-item { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
   .journal-item:last-child { border-bottom: none; }
   .journal-item .jd { color: var(--muted); font-size: 11px; margin-bottom: 1px; }
+  details.meal { border-bottom: 1px solid var(--border); }
+  details.meal summary { padding: 11px 0; cursor: pointer; font-size: 14px; list-style: none; }
+  details.meal summary::-webkit-details-marker { display: none; }
+  details.meal summary::before { content: '▸ '; color: var(--muted); }
+  details.meal[open] summary::before { content: '▾ '; }
+  details.meal summary .tag { color: var(--accent); font-weight: 700; margin-right: 8px; }
+  details.meal .recipe { font-size: 13px; color: var(--muted); line-height: 1.55; white-space: pre-line; padding: 2px 0 12px 14px; }
+  .shop-cat { font-size: 12px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent); margin: 14px 0 4px; }
   .grateful { margin-top: 4px; }
   .monday { border: 1px solid var(--accent); }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
@@ -275,6 +283,15 @@
 </div>
 
 <div class="card">
+  <h2>Ernährung · Woche <span class="count" id="shopCount"></span></h2>
+  <div class="sub-head">Wochenplan · tippen für Rezept</div>
+  <div id="mealPlan"></div>
+  <div class="sub-head" style="margin-top:16px">Einkaufsliste · zum Abhaken</div>
+  <div id="shopList"></div>
+  <button id="shopReset" class="pedo-btn" style="margin-top:12px">Liste zurücksetzen</button>
+</div>
+
+<div class="card">
   <h2>Cloud-Backup <span class="count" id="cloudStatus"></span></h2>
   <div id="cloudConnected" style="display:none">
     <div class="sec-note" id="cloudInfo" style="margin-top:0">Verbunden. Sichert automatisch bei jeder Änderung.</div>
@@ -306,7 +323,7 @@
 <script>
 const KEY = 'fels-data';
 const todayStr = () => new Date().toISOString().slice(0,10);
-const DEFAULTS = { days:{}, weights:[], books:[], startWeight:null, bills:[], tasks:[], routines:[], prayers:[], terraGoals:[], seeded:false, seededTerra:false };
+const DEFAULTS = { days:{}, weights:[], books:[], startWeight:null, bills:[], tasks:[], routines:[], prayers:[], terraGoals:[], shopping:{}, seeded:false, seededTerra:false };
 function load() {
   const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
   return Object.assign({}, DEFAULTS, raw);
@@ -325,6 +342,79 @@ const AREAS = ['Seele','Körper','Kopf','Terrahum','Büro','Haushalt','Geld','So
 const AREA_ICON = { 'Seele':'🕊️','Körper':'💪','Kopf':'📖','Terrahum':'🌱','Büro':'🗂️','Haushalt':'🧹','Geld':'💰','Sonstiges':'•' };
 const WD = ['Mo','Di','Mi','Do','Fr','Sa','So'];        // Anzeige-Reihenfolge
 const WD_NUM = [1,2,3,4,5,6,0];                          // JS getDay() zu Anzeige-Index
+
+// Wochen-Essensplan (kein Frühstück; Magerquark jeden Abend). Tippen zeigt das Rezept.
+const MEALPLAN = [
+  { tag: 'Mo', summary: 'Poulet-Salat · Rindshack-Pfanne', recipe:
+`MITTAG – Poulet-Salat
+150 g Pouletbrust, Blattsalat, 8 Cherrytomaten, ½ Gurke, 1 EL Olivenöl, Zitrone, Salz/Pfeffer.
+1) Poulet würzen, 4–5 Min/Seite braten, in Streifen schneiden.
+2) Salat, Tomaten, Gurke anrichten; Dressing aus Öl, Zitrone, Salz, Pfeffer; Poulet drauf.
+
+ABEND – Rindshack-Gemüsepfanne + Quark
+150 g mageres Hackfleisch, 1 Zucchetti, 1 Peperoni, 1 Zwiebel, 2 Tomaten, 60 g Vollkornreis, Paprika.
+1) Reis kochen. 2) Zwiebel andünsten, Hack anbraten, würzen; Gemüse dazu, 8–10 Min garen.
+3) Mit Reis. Tipp: 2. Portion für Di-Mittag beiseite.
+Dessert: 250 g Magerquark + Beeren + Zimt.` },
+  { tag: 'Di', summary: 'Rest-Pfanne · Ofen-Poulet-Blech', recipe:
+`MITTAG – Rest der Rindshack-Pfanne von Montag.
+
+ABEND – Ofen-Poulet-Blech + Quark-Dip
+150 g Poulet, ½ Brokkoli, 2 Karotten, 1 Süsskartoffel, Olivenöl, Gewürze.
+Dip: 150 g Magerquark, Kräuter, ½ Knoblauchzehe, Salz.
+1) Ofen 200°C. Gemüse + Süsskartoffel in Stücke, mit Öl/Gewürzen aufs Blech.
+2) Poulet dazu, 25–30 Min backen. 3) Quark-Dip verrühren, dazu.` },
+  { tag: 'Mi', summary: 'Linsensalat · Minutensteak', recipe:
+`MITTAG – Linsensalat mit Feta
+1 Dose Linsen, 60 g Feta, Cherrytomaten, ½ Gurke, Petersilie, Öl, Essig.
+1) Linsen abspülen; alles klein schneiden, mischen; mit Öl/Essig, Salz, Pfeffer abschmecken.
+
+ABEND – Minutensteak + Ofen-Zucchetti + Salat + Quark
+150 g Rinds-Minutensteak, 1 Zucchetti, grüner Salat.
+1) Zucchetti in Scheiben, 200°C 15 Min. 2) Steak scharf 1–2 Min/Seite, ruhen lassen.
+3) Salat dazu. Dessert: Magerquark + Beeren.` },
+  { tag: 'Do', summary: 'Poulet-Wrap · Gemüse-Curry', recipe:
+`MITTAG – Poulet-Wrap
+1 Vollkorn-Wrap, Poulet (Rest od. frisch), Salat, Tomate, 2 EL Hüttenkäse. Füllen, rollen.
+
+ABEND – Gemüse-Kichererbsen-Curry mit Poulet + Quark
+150 g Poulet, 1 Dose Kichererbsen, Peperoni + Karotte + Zucchetti, ½ Dose Light-Kokosmilch, Currypaste, wenig Reis.
+1) Poulet anbraten, rausnehmen. 2) Gemüse andünsten, Currypaste, Kokosmilch, Kichererbsen; 10 Min köcheln, Poulet zurück.
+3) Mit wenig Reis. Dessert: Magerquark + Zimt.` },
+  { tag: 'Fr', summary: 'Ei-Salat · Gefüllte Peperoni', recipe:
+`MITTAG – Grosser Salat mit Eiern (oder Rest Curry)
+2–3 Eier hart kochen; grosser Salat, Ei drauf, Dressing.
+
+ABEND – Gefüllte Peperoni mit Rindshack + Quark-Topping
+3 Peperoni, 150 g Hackfleisch, 1 Zwiebel, 2 Tomaten, 100 g Magerquark, Gewürze.
+1) Ofen 200°C. Hack mit Zwiebel/Tomaten anbraten, würzen.
+2) Peperoni halbieren, füllen, Magerquark-Topping drauf, 25 Min backen. Salat dazu.` },
+  { tag: 'Sa', summary: 'Poulet-Gemüsesuppe · Ofenblech', recipe:
+`MITTAG – Poulet-Gemüsesuppe (grosse Portion)
+150 g Poulet, Karotten, Zwiebel, Brokkoli-Reste, Gemüsebouillon, Kräuter.
+1) Zwiebel andünsten, Gemüse + Bouillon, 20 Min köcheln, Poulet dazu. Rest für Sonntag.
+
+ABEND – Lachs oder Poulet vom Blech + Quark-Dip
+150 g Lachs/Poulet, viel Gemüse, Olivenöl.
+1) 200°C, Gemüse + Fisch/Poulet 20–25 Min. Magerquark-Knoblauch-Dip dazu.` },
+  { tag: 'So', summary: 'Poulet-Bowl · Rest / Voressen', recipe:
+`MITTAG – Poulet-Bowl
+Quinoa, Poulet, Gemüse, 2 EL Hüttenkäse. Quinoa kochen, als Bowl anrichten.
+
+ABEND – Rest Suppe / leichtes Rindsvoressen + Quark
+Rest Suppe wärmen, oder 200 g Voressen mit Karotten schmoren.
+Dessert: Magerquark + Beeren.` },
+];
+
+// Einkaufsliste (1 Woche, 1 Person) – Häkchen-Status wird gespeichert (data.shopping)
+const SHOPPING = [
+  { cat: 'Fleisch & Fisch', items: ['Pouletbrust ~800 g','Mageres Rindshackfleisch ~400 g','Rinds-Minutensteak/Plätzli ~150 g','Rindsvoressen mager ~200 g','Lachsfilet ~150 g (optional)'] },
+  { cat: 'Milchprodukte & Eier', items: ['Magerquark ~2 kg (4× 500 g)','Hüttenkäse 1 Becher','Feta 1 Packung','Eier 6 Stk.'] },
+  { cat: 'Gemüse', items: ['Blattsalat 2–3','Cherrytomaten 500 g','Tomaten 4','Gurke 2','Zucchetti 4','Peperoni 6','Brokkoli 1','Karotten 1,5 kg','Champignons 250 g','Spinat 300 g','Zwiebeln 4','Knoblauch 1 Knolle','Süsskartoffel 2','Zitrone 2','Petersilie/Kräuter'] },
+  { cat: 'Obst', items: ['Beeren ~700 g','Äpfel 4'] },
+  { cat: 'Vorrat & Trockenes', items: ['Vollkornreis','Quinoa (klein)','Linsen (od. 1 Dose)','Kichererbsen 1 Dose','Vollkornbrot','Vollkorn-Wraps','Light-Kokosmilch 1 Dose','Currypaste','Baumnüsse/Mandeln','Zimt','Leinsamen (optional)','Olivenöl (prüfen)'] },
+  { cat: 'Basics prüfen', items: ['Salz, Pfeffer, Paprika','Senf, Essig'] },
+];
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
 const fmtDay = iso => { const [y,m,dd] = iso.split('-'); return dd + '.' + m + '.'; };
 function daysUntil(iso) {
@@ -706,6 +796,23 @@ document.getElementById('cloudDisconnect').onclick = () => {
 };
 setCloudUI();
 
+// --- Einkaufsliste abhaken / zurücksetzen ---
+buildMealPlan();
+document.getElementById('shopList').onclick = e => {
+  const row = e.target.closest('[data-sid]'); if (!row) return;
+  const id = row.dataset.sid;
+  data.shopping = data.shopping || {};
+  const on = !data.shopping[id];
+  if (on) data.shopping[id] = true; else delete data.shopping[id];
+  save(data);
+  row.classList.toggle('done', on);
+  const b = row.querySelector('.check-btn'); if (b) b.classList.toggle('on', on);
+  updateShopCount();
+};
+document.getElementById('shopReset').onclick = () => {
+  if (confirm('Alle Häkchen der Einkaufsliste zurücksetzen (fürs nächste Einkaufen)?')) { data.shopping = {}; save(data); renderShopping(); }
+};
+
 // Export / Reset
 document.getElementById('exportBtn').onclick = () => {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -892,6 +999,31 @@ function render() {
   renderTerra();
   renderCalendar();
   renderJournal();
+  renderShopping();
+}
+
+function buildMealPlan() {
+  document.getElementById('mealPlan').innerHTML = MEALPLAN.map(d =>
+    `<details class="meal"><summary><span class="tag">${d.tag}</span>${esc(d.summary)}</summary><div class="recipe">${esc(d.recipe)}</div></details>`
+  ).join('');
+}
+function renderShopping() {
+  const chk = data.shopping || {};
+  let total = 0, done = 0, html = '';
+  SHOPPING.forEach((grp, ci) => {
+    html += `<div class="shop-cat">${esc(grp.cat)}</div>`;
+    grp.items.forEach((it, ii) => {
+      const id = 's' + ci + '_' + ii; total++; const on = !!chk[id]; if (on) done++;
+      html += `<div class="list-row ${on ? 'done' : ''}" data-sid="${id}"><button class="check-btn ${on ? 'on' : ''}">✓</button><div class="lr-body"><div class="lr-title">${esc(it)}</div></div></div>`;
+    });
+  });
+  document.getElementById('shopList').innerHTML = html;
+  updateShopCount();
+}
+function updateShopCount() {
+  let total = 0, done = 0;
+  SHOPPING.forEach((grp, ci) => grp.items.forEach((it, ii) => { total++; if (data.shopping && data.shopping['s' + ci + '_' + ii]) done++; }));
+  document.getElementById('shopCount').textContent = done + '/' + total + ' im Wagen';
 }
 
 function renderPrayers() {
