@@ -74,6 +74,19 @@
   .pu-btns button { background: var(--card2); color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 0; font-size: 14px; font-weight: 700; cursor: pointer; flex: 1 1 0; }
   .pu-btns button.minus { color: var(--muted); font-weight: 400; flex: 0 0 52px; }
   .pu-btns button.reset { color: var(--muted); font-weight: 400; flex: 0 0 44px; }
+  .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+  .cal-head button { background: var(--card2); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 4px 14px; font-size: 16px; cursor: pointer; }
+  .cal-title { font-size: 14px; color: var(--text); font-weight: 600; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; }
+  .cal-grid .wd { text-align: center; font-size: 10px; color: var(--muted); padding-bottom: 2px; }
+  .cal-cell { aspect-ratio: 1 / 1; min-height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; background: var(--card2); color: var(--muted); border: 1px solid transparent; }
+  .cal-cell.full { background: var(--green); color: #fff; font-weight: 700; }
+  .cal-cell.partial { background: #2f3a24; color: var(--text); }
+  .cal-cell.today { border-color: var(--accent); }
+  .cal-cell.empty { background: transparent; }
+  .journal-item { padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13px; line-height: 1.5; }
+  .journal-item:last-child { border-bottom: none; }
+  .journal-item .jd { color: var(--muted); font-size: 11px; margin-bottom: 1px; }
   .grateful { margin-top: 4px; }
   .monday { border: 1px solid var(--accent); }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
@@ -177,6 +190,16 @@
 </div>
 
 <div class="card">
+  <h2>Gebet &amp; Anliegen <span class="count" id="prayerCount"></span></h2>
+  <div id="prayerList"></div>
+  <div class="add-form" id="prayerForm">
+    <input type="text" id="prayerTitle" placeholder="Anliegen … (Person, Situation, Dank)">
+    <button id="prayerAdd">+ Anliegen</button>
+  </div>
+  <div class="sec-note">Beten – und wenn Gott antwortet, mit dem Haken als „erhört" markieren.</div>
+</div>
+
+<div class="card">
   <h2>Zahlungen / Rechnungen <span class="count" id="billsSum"></span></h2>
   <div id="billsList"></div>
   <div class="add-form" id="billForm">
@@ -212,6 +235,16 @@
 </div>
 
 <div class="card">
+  <h2>Terrahum-Ziele <span class="count" id="terraCount"></span></h2>
+  <div id="terraList"></div>
+  <div class="add-form" id="terraForm">
+    <input type="text" id="terraTitle" placeholder="Neues Ziel …">
+    <button id="terraAdd">+ Ziel</button>
+  </div>
+  <div class="sec-note">Dein Pilot-Weg zum 7.1.2027. Haken = erreicht.</div>
+</div>
+
+<div class="card">
   <h2>Fortschritt</h2>
   <div class="stat-grid">
     <div class="stat"><div class="val" id="kgLost">–</div><div class="lbl">kg abgenommen</div></div>
@@ -223,22 +256,38 @@
 </div>
 
 <div class="card">
+  <h2>Rückblick</h2>
+  <div class="cal-head">
+    <button id="calPrev" type="button">‹</button>
+    <div class="cal-title" id="calTitle"></div>
+    <button id="calNext" type="button">›</button>
+  </div>
+  <div class="cal-grid" id="calGrid"></div>
+  <div class="sec-note" style="margin-top:8px">Grün = Tag komplett · gedämpft = teilweise · Rahmen = heute</div>
+  <div class="sub-head" style="margin-top:18px">Dankbarkeit – Rückblick</div>
+  <div id="journalList"></div>
+</div>
+
+<div class="card">
   <h2>Bücher</h2>
   <div class="books"><button id="addBook">+ Buch fertig</button><span id="lastBook" style="font-size:13px;color:var(--muted)"></span></div>
   <div class="book-list" id="bookList"></div>
 </div>
 
 <div class="footer-btns">
-  <button id="exportBtn">Daten exportieren</button>
-  <button id="resetToday">Heute zurücksetzen</button>
+  <button id="exportBtn">Export</button>
+  <button id="importBtn">Import</button>
+  <button id="resetToday">Heute zurück</button>
 </div>
+<input type="file" id="importFile" accept="application/json,.json" style="display:none">
+<div class="sec-note" style="text-align:center; margin-top:6px">Export sichert alles als Datei · Import spielt ein Backup zurück (überschreibt dieses Gerät)</div>
 
 <div class="rule">«Zwei verpasste Tage in Folge gibt es nicht.»<br>Ziel: 7. Januar 2027 · −20 kg · Terrahum läuft · 6 Bücher</div>
 
 <script>
 const KEY = 'fels-data';
 const todayStr = () => new Date().toISOString().slice(0,10);
-const DEFAULTS = { days:{}, weights:[], books:[], startWeight:null, bills:[], tasks:[], routines:[], seeded:false };
+const DEFAULTS = { days:{}, weights:[], books:[], startWeight:null, bills:[], tasks:[], routines:[], prayers:[], terraGoals:[], seeded:false, seededTerra:false };
 function load() {
   const raw = JSON.parse(localStorage.getItem(KEY) || '{}');
   return Object.assign({}, DEFAULTS, raw);
@@ -273,6 +322,19 @@ if (!data.seeded) {
     { id: uid(), title: 'Woche planen · in Ruhe vor Gott', area: 'Seele', days: [0], doneOn: {} },
   ];
   data.seeded = true;
+  save(data);
+}
+if (!data.seededTerra) {
+  data.terraGoals = [
+    { id: uid(), title: 'Zusatzvereinbarung Timac einreichen', done: false, doneDate: null },
+    { id: uid(), title: 'Pilot-Doku aufsetzen & laufend pflegen', done: false, doneDate: null },
+    { id: uid(), title: 'Preisliste Terrahum finalisieren', done: false, doneDate: null },
+    { id: uid(), title: 'Erste Offerte an Pilotkunden', done: false, doneDate: null },
+    { id: uid(), title: 'ERSTE BEZAHLTE RECHNUNG', done: false, doneDate: null },
+    { id: uid(), title: '2–3 zahlende Kunden gewinnen', done: false, doneDate: null },
+    { id: uid(), title: 'Jahresabschluss Pilot (Dezember)', done: false, doneDate: null },
+  ];
+  data.seededTerra = true;
   save(data);
 }
 
@@ -492,6 +554,55 @@ document.getElementById('routineList').onclick = e => {
   if (e.target.classList.contains('del')) { data.routines = data.routines.filter(x => x.id !== r.id); persist(); return; }
   if (e.target.classList.contains('check-btn')) { r.doneOn[today] = !r.doneOn[today]; persist(); }
 };
+document.getElementById('prayerList').onclick = e => {
+  const row = e.target.closest('[data-id]'); if (!row) return;
+  const p = data.prayers.find(x => x.id === row.dataset.id); if (!p) return;
+  if (e.target.classList.contains('del')) { data.prayers = data.prayers.filter(x => x.id !== p.id); persist(); return; }
+  if (e.target.classList.contains('check-btn')) { p.answered = !p.answered; p.answeredDate = p.answered ? today : null; persist(); }
+};
+document.getElementById('terraList').onclick = e => {
+  const row = e.target.closest('[data-id]'); if (!row) return;
+  const g = data.terraGoals.find(x => x.id === row.dataset.id); if (!g) return;
+  if (e.target.classList.contains('del')) { data.terraGoals = data.terraGoals.filter(x => x.id !== g.id); persist(); return; }
+  if (e.target.classList.contains('check-btn')) { g.done = !g.done; g.doneDate = g.done ? today : null; persist(); }
+};
+
+// --- Add: Anliegen & Terrahum-Ziel ---
+document.getElementById('prayerAdd').onclick = () => {
+  const t = document.getElementById('prayerTitle').value.trim(); if (!t) { alert('Anliegen bitte eingeben.'); return; }
+  data.prayers.push({ id: uid(), title: t, date: today, answered: false, answeredDate: null });
+  document.getElementById('prayerTitle').value = ''; persist();
+};
+document.getElementById('terraAdd').onclick = () => {
+  const t = document.getElementById('terraTitle').value.trim(); if (!t) { alert('Ziel bitte eingeben.'); return; }
+  data.terraGoals.push({ id: uid(), title: t, done: false, doneDate: null });
+  document.getElementById('terraTitle').value = ''; persist();
+};
+
+// --- Rückblick-Kalender ---
+let calOffset = 0;
+document.getElementById('calPrev').onclick = () => { calOffset--; renderCalendar(); };
+document.getElementById('calNext').onclick = () => { calOffset++; renderCalendar(); };
+
+// --- Backup importieren (wiederherstellen) ---
+document.getElementById('importBtn').onclick = () => document.getElementById('importFile').click();
+document.getElementById('importFile').onchange = (e) => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const obj = JSON.parse(reader.result);
+      if (!obj || typeof obj !== 'object' || !('days' in obj)) { alert('Das sieht nicht nach einem FELS-Backup aus.'); return; }
+      if (!confirm('Backup einspielen? Die aktuellen Daten auf DIESEM Gerät werden ersetzt.')) return;
+      data = Object.assign({}, DEFAULTS, obj);
+      save(data);
+      alert('Backup wiederhergestellt.');
+      location.reload();
+    } catch (err) { alert('Datei konnte nicht gelesen werden: ' + err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+};
 
 // Export / Reset
 document.getElementById('exportBtn').onclick = () => {
@@ -674,6 +785,65 @@ function render() {
     12:'Dezember: −18–20 kg · Jahresabschluss Pilot · Buch 6',
     1:'Januar: ZIEL ERREICHT – Rückblick & Plan 2027' };
   document.getElementById('milestone').innerHTML = '<b>Meilenstein diesen Monat:</b><br>' + (ms[d.getMonth()+1] || '');
+
+  renderPrayers();
+  renderTerra();
+  renderCalendar();
+  renderJournal();
+}
+
+function renderPrayers() {
+  const open = data.prayers.filter(p => !p.answered);
+  document.getElementById('prayerCount').textContent = open.length ? open.length + ' offen' : '';
+  const ordered = [...open, ...data.prayers.filter(p => p.answered)];
+  document.getElementById('prayerList').innerHTML = data.prayers.length ? ordered.map(p =>
+    `<div class="list-row ${p.answered?'done':''}" data-id="${p.id}">
+      <button class="check-btn ${p.answered?'on':''}" title="als erhört markieren">✓</button>
+      <div class="lr-body"><div class="lr-title">${esc(p.title)}${p.answered?' <span class="badge paid">erhört</span>':''}</div>
+        <div class="lr-meta">${p.answered ? ('erhört ' + fmtDay(p.answeredDate)) : ('seit ' + fmtDay(p.date))}</div></div>
+      <button class="del">✕</button></div>`
+  ).join('') : '<div class="empty">Keine Anliegen. Leg dein Herz vor Gott ab.</div>';
+}
+
+function renderTerra() {
+  const done = data.terraGoals.filter(g => g.done).length;
+  document.getElementById('terraCount').textContent = data.terraGoals.length ? done + '/' + data.terraGoals.length + ' erreicht' : '';
+  document.getElementById('terraList').innerHTML = data.terraGoals.length ? data.terraGoals.map(g =>
+    `<div class="list-row ${g.done?'done':''}" data-id="${g.id}">
+      <button class="check-btn ${g.done?'on':''}">✓</button>
+      <div class="lr-body"><div class="lr-title">🌱 ${esc(g.title)}${g.done?' <span class="badge paid">erreicht</span>':''}</div>
+        ${g.done && g.doneDate ? `<div class="lr-meta">erreicht ${fmtDay(g.doneDate)}</div>` : ''}</div>
+      <button class="del">✕</button></div>`
+  ).join('') : '<div class="empty">Keine Ziele.</div>';
+}
+
+function renderCalendar() {
+  const base = new Date(); base.setDate(1); base.setMonth(base.getMonth() + calOffset);
+  const year = base.getFullYear(), month = base.getMonth();
+  document.getElementById('calTitle').textContent = base.toLocaleDateString('de-CH', { month: 'long', year: 'numeric' });
+  const offset = (new Date(year, month, 1).getDay() + 6) % 7;   // Mo=0
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  let cells = ['Mo','Di','Mi','Do','Fr','Sa','So'].map(w => `<div class="wd">${w}</div>`).join('');
+  for (let i = 0; i < offset; i++) cells += '<div class="cal-cell empty"></div>';
+  for (let dd = 1; dd <= daysInMonth; dd++) {
+    const iso = year + '-' + String(month + 1).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+    const rec = data.days[iso];
+    let cls = 'cal-cell';
+    if (dayComplete(rec)) cls += ' full';
+    else if (rec && Object.keys(rec).some(k => rec[k])) cls += ' partial';
+    if (iso === today) cls += ' today';
+    cells += `<div class="${cls}">${dd}</div>`;
+  }
+  document.getElementById('calGrid').innerHTML = cells;
+}
+
+function renderJournal() {
+  const entries = Object.entries(data.days)
+    .filter(([iso, dd]) => dd.grateful && dd.grateful.trim())
+    .sort((a, b) => b[0].localeCompare(a[0])).slice(0, 12);
+  document.getElementById('journalList').innerHTML = entries.length ? entries.map(([iso, dd]) =>
+    `<div class="journal-item"><div class="jd">${fmtDay(iso)}${iso.slice(0,4)}</div>${esc(dd.grateful)}</div>`
+  ).join('') : '<div class="empty">Noch keine Dankbarkeits-Einträge.</div>';
 }
 
 function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }

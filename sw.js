@@ -1,4 +1,4 @@
-const CACHE = 'fels-v5';
+const CACHE = 'fels-v6';
 const ASSETS = ['./index.html', './verses.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
