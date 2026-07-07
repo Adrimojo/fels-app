@@ -57,6 +57,10 @@
   input[type=number] { width: 110px; text-align: right; }
   input[type=text] { width: 100%; }
   input[type=date] { color-scheme: dark; }
+  .pedo-btn { margin-top: 8px; background: var(--card2); color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 7px 14px; font-size: 13px; cursor: pointer; }
+  .pedo-btn.on { background: var(--green); color: #fff; border-color: var(--green); }
+  .pedo-status { font-size: 11px; color: var(--muted); margin-top: 6px; }
+  .pedo-status.live { color: var(--green); }
   .grateful { margin-top: 4px; }
   .monday { border: 1px solid var(--accent); }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
@@ -134,7 +138,7 @@
   <div class="check-row"><div><div class="label">Terrahum: 1 Schritt</div><div class="hint">Ein Ding, das den Pilot voranbringt</div></div><div class="toggle" data-k="terra"></div></div>
   <div class="check-row"><div><div class="label">Essen nach Plan</div><div class="hint">Kein Snack unterwegs, nichts nach 20:00</div></div><div class="toggle" data-k="food"></div></div>
   <div class="check-row"><div><div class="label">Ausgaben notiert</div><div class="hint">5 Sekunden Ehrlichkeit</div></div><div class="toggle" data-k="money"></div></div>
-  <div class="check-row"><div><div class="label">Schritte heute</div><div class="hint">Aus deinem Handy-Zähler übertragen</div></div><input type="number" id="steps" placeholder="z.B. 8500" inputmode="numeric"></div>
+  <div class="check-row"><div style="flex:1"><div class="label">Schritte heute</div><div class="hint">Live zählen (App offen) – oder Zahl von Hand eintragen/korrigieren</div><button id="pedoBtn" class="pedo-btn" type="button">▶ Zählen starten</button><div class="pedo-status" id="pedoStatus"></div></div><input type="number" id="steps" placeholder="z.B. 8500" inputmode="numeric" style="align-self:flex-start"></div>
   <div class="check-row" id="weightRow" style="display:none"><div><div class="label">⚖️ Gewicht (Montag!)</div><div class="hint">Nüchtern, gleiche Waage</div></div><input type="number" id="weight" placeholder="kg" step="0.1" inputmode="decimal"></div>
   <div class="check-row grateful" style="display:block; border:none;"><div class="label" style="margin-bottom:6px;">Wofür dankst du Gott heute?</div><input type="text" id="grateful" placeholder="Eine Sache reicht…"></div>
 </div>
@@ -296,6 +300,63 @@ weightEl.onchange = () => {
   if (!data.startWeight) data.startWeight = kg;
   persist();
 };
+
+// ---------- Live-Schrittzähler (Bewegungssensor, nur bei offener App) ----------
+const pedoBtn = document.getElementById('pedoBtn');
+const pedoStatus = document.getElementById('pedoStatus');
+let pedoActive = false, wakeLock = null, saveTimer = null;
+let smMag = 9.81, armed = false, lastStepT = 0;
+const HI = 11.3, LO = 10.2, MIN_MS = 270;   // Schwellen + Refraktärzeit gegen Doppelzählung
+
+function setPedoStatus(txt, live) {
+  pedoStatus.textContent = txt;
+  pedoStatus.classList.toggle('live', !!live);
+}
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity; if (!a || a.x == null) return;
+  const mag = Math.hypot(a.x, a.y, a.z);
+  smMag = smMag * 0.8 + mag * 0.2;                 // Glättung
+  const now = e.timeStamp || performance.now();
+  if (smMag > HI && !armed && (now - lastStepT) > MIN_MS) {
+    armed = true; lastStepT = now;
+    day.steps = (day.steps || 0) + 1;
+    stepsEl.value = day.steps;
+    setPedoStatus('zählt… ' + day.steps.toLocaleString('de-CH') + ' Schritte heute', true);
+    if (!saveTimer) saveTimer = setTimeout(() => { saveTimer = null; save(data); render(); }, 1500);
+  }
+  if (smMag < LO) armed = false;                    // Hysterese: erst zurücksetzen, wenn deutlich unter Schwelle
+}
+async function startPedo() {
+  if (typeof DeviceMotionEvent === 'undefined') { setPedoStatus('Dieses Gerät hat keinen Bewegungssensor. Zahl bitte von Hand eintragen.'); return; }
+  if (typeof DeviceMotionEvent.requestPermission === 'function') {   // iOS 13+
+    try {
+      const p = await DeviceMotionEvent.requestPermission();
+      if (p !== 'granted') { setPedoStatus('Bewegungszugriff nicht erlaubt. In den Einstellungen für die Website freigeben.'); return; }
+    } catch (err) { setPedoStatus('Bewegungssensor nicht verfügbar.'); return; }
+  }
+  window.addEventListener('devicemotion', onMotion);
+  pedoActive = true;
+  pedoBtn.classList.add('on'); pedoBtn.textContent = '⏸ Zählen stoppen';
+  setPedoStatus('zählt… Handy einstecken, App offen lassen.', true);
+  try { if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+}
+async function stopPedo() {
+  window.removeEventListener('devicemotion', onMotion);
+  pedoActive = false;
+  pedoBtn.classList.remove('on'); pedoBtn.textContent = '▶ Zählen starten';
+  if (saveTimer) { clearTimeout(saveTimer); saveTimer = null; }
+  save(data); render();
+  setPedoStatus(day.steps ? (day.steps.toLocaleString('de-CH') + ' Schritte heute erfasst') : '');
+  if (wakeLock) { try { await wakeLock.release(); } catch (e) {} wakeLock = null; }
+}
+pedoBtn.onclick = () => pedoActive ? stopPedo() : startPedo();
+// Bildschirm ging aus & wieder an → WakeLock erneuern, damit weitergezählt wird
+document.addEventListener('visibilitychange', async () => {
+  if (pedoActive && document.visibilityState === 'visible' && 'wakeLock' in navigator && !wakeLock) {
+    try { wakeLock = await navigator.wakeLock.request('screen'); } catch (e) {}
+  }
+});
+if (day.steps) setPedoStatus(day.steps.toLocaleString('de-CH') + ' Schritte heute');
 
 // Bücher
 document.getElementById('addBook').onclick = () => {
