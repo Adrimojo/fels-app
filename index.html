@@ -66,6 +66,14 @@
   .sub-head .step { min-width: 19px; height: 19px; line-height: 19px; text-align: center; background: var(--accent); color: #14170f; border-radius: 50%; font-size: 11px; font-weight: 700; margin-right: 8px; }
   .check-row.sub { padding-left: 27px; }
   .check-row.sub .hint { color: var(--muted); }
+  .pu-count { color: var(--accent); font-weight: 700; }
+  .pu-count.done { color: var(--green); }
+  .pu-bar { height: 8px; background: var(--card2); border: 1px solid var(--border); border-radius: 6px; overflow: hidden; margin: 9px 0 10px; }
+  .pu-fill { height: 100%; background: var(--green); width: 0%; transition: width .25s; }
+  .pu-btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .pu-btns button { background: var(--card2); color: var(--accent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 0; font-size: 14px; font-weight: 700; cursor: pointer; flex: 1 1 0; }
+  .pu-btns button.minus { color: var(--muted); font-weight: 400; flex: 0 0 52px; }
+  .pu-btns button.reset { color: var(--muted); font-weight: 400; flex: 0 0 44px; }
   .grateful { margin-top: 4px; }
   .monday { border: 1px solid var(--accent); }
   .stat-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; text-align: center; }
@@ -144,7 +152,18 @@
   <div class="check-row"><div><div class="label"><span class="step">5</span>Abendessen gesund</div><div class="hint">Leicht, früh, nach Plan</div></div><div class="toggle" data-k="dinner"></div></div>
 
   <div class="sub-head"><span class="step">6</span>Sport</div>
-  <div class="check-row sub"><div><div class="label">Liegestützen 100</div><div class="hint">über den Tag verteilt ist ok</div></div><div class="toggle" data-k="pushups"></div></div>
+  <div class="check-row sub" style="display:block">
+    <div class="label">Liegestützen <span class="pu-count" id="puCount">0</span> / 100</div>
+    <div class="hint">10 hier, 10 dort – über den Tag bis 100</div>
+    <div class="pu-bar"><div class="pu-fill" id="puFill"></div></div>
+    <div class="pu-btns">
+      <button type="button" data-add="10">+10</button>
+      <button type="button" data-add="20">+20</button>
+      <button type="button" data-add="25">+25</button>
+      <button type="button" class="minus" data-add="-10">−10</button>
+      <button type="button" class="reset" id="puReset">0</button>
+    </div>
+  </div>
   <div class="check-row sub"><div><div class="label">Kettlebell 45 Min</div><div class="hint">Kraft &amp; Ausdauer</div></div><div class="toggle" data-k="kettlebell"></div></div>
 
   <div class="check-row"><div><div class="label"><span class="step">7</span>Lesen 30 Min</div><div class="hint">Buch, kein Handy</div></div><div class="toggle" data-k="read"></div></div>
@@ -315,6 +334,21 @@ weightEl.onchange = () => {
   persist();
 };
 
+// ---------- Liegestützen-Zähler ----------
+function updatePushupsUI() {
+  const c = day.pushups || 0;
+  const el = document.getElementById('puCount');
+  const fill = document.getElementById('puFill');
+  if (el) { el.textContent = c; el.classList.toggle('done', c >= PU_GOAL); }
+  if (fill) fill.style.width = Math.min(100, c / PU_GOAL * 100) + '%';
+}
+function bumpPushups(delta) {
+  day.pushups = Math.max(0, (day.pushups || 0) + delta);
+  save(data); updatePushupsUI(); render();
+}
+document.querySelectorAll('.pu-btns button[data-add]').forEach(b => { b.onclick = () => bumpPushups(+b.dataset.add); });
+document.getElementById('puReset').onclick = () => bumpPushups(-(day.pushups || 0));
+
 // ---------- Live-Schrittzähler (Bewegungssensor, nur bei offener App) ----------
 const pedoBtn = document.getElementById('pedoBtn');
 const pedoStatus = document.getElementById('pedoStatus');
@@ -473,8 +507,9 @@ document.getElementById('resetToday').onclick = () => {
   }
 };
 
+const PU_GOAL = 100;
 const CORE = ['mind','morning','terra','food','dinner','pushups','kettlebell','read','pray_eve'];
-function dayComplete(dd) { return !!dd && CORE.every(k => dd[k]); }
+function dayComplete(dd) { return !!dd && CORE.every(k => k === 'pushups' ? (dd.pushups || 0) >= PU_GOAL : dd[k]); }
 
 function calcStreak() {
   let s = 0; const cur = new Date();
@@ -516,11 +551,16 @@ function buildFocus() {
   const habits = [
     ['mind','1 · Zuerst: Stille mit Gott'], ['morning','2 · Morgenroutine'],
     ['terra','3 · Terrahum: agrar-crm checken'], ['food','4 · Essen nach Plan'],
-    ['dinner','5 · Abendessen gesund'], ['pushups','6 · Sport: Liegestützen 100'],
+    ['dinner','5 · Abendessen gesund'], ['pushups','6 · Sport: Liegestützen'],
     ['kettlebell','6 · Sport: Kettlebell 45 Min'], ['read','7 · Lesen 30 Min'],
     ['pray_eve','8 · Abendgebet & Dankbarkeit'],
   ];
-  habits.forEach(([k,label],i) => { if (!day[k]) items.push({ cls: '', icon: '◻️', sort: 9 + i * 0.01, main: label, sub: 'Check-in offen' }); });
+  habits.forEach(([k,label],i) => {
+    let open, sub = 'Check-in offen';
+    if (k === 'pushups') { const c = day.pushups || 0; open = c < PU_GOAL; sub = c + '/' + PU_GOAL + ' Liegestützen'; }
+    else open = !day[k];
+    if (open) items.push({ cls: '', icon: '◻️', sort: 9 + i * 0.01, main: label, sub });
+  });
 
   items.sort((a,b2) => a.sort - b2.sort);
   return items;
@@ -529,6 +569,7 @@ function buildFocus() {
 function render() {
   document.getElementById('streak').textContent = calcStreak();
   document.getElementById('doneBanner').style.display = dayComplete(day) ? 'block' : 'none';
+  updatePushupsUI();
 
   // Heute-Fokus
   const fx = buildFocus();
